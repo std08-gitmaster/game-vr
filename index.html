@@ -2,219 +2,186 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-    <title>AR Circuit Master - Active Learning</title>
-    <!-- โหลด A-Frame และ AR.js -->
-    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Circuit Scanner & Python Logic</title>
     <style>
-        /* ตกแต่งส่วน UI ที่ซ้อนทับบนหน้าจอกล้อง */
-        body { margin: 0; overflow: hidden; font-family: 'Sarabun', sans-serif; }
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; flex-direction: column; justify-content: space-between; padding: 10px; box-sizing: border-box; }
-        .top-bar { display: flex; justify-content: space-between; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 10px; color: white; pointer-events: auto; }
-        .progress { display: flex; gap: 5px; }
-        .bulb-icon { width: 20px; height: 20px; border-radius: 50%; background: gray; }
-        .bulb-icon.active { background: #FFDC00; box-shadow: 0 0 10px #FFDC00; }
-        .mission-panel { background: rgba(255,255,255,0.9); padding: 15px; border-radius: 10px; pointer-events: auto; margin-bottom: 20px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .btn { padding: 10px 20px; background: #0074D9; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin: 5px; }
-        .btn-hint { background: #FF851B; }
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', Courier, monospace; color: #00FF00; }
+        
+        /* วิดีโอพื้นหลัง (กล้อง) */
+        #camera-feed { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+        
+        /* เลเยอร์ UI */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+        
+        /* แถบสถานะด้านบน */
+        .top-bar { background: rgba(0, 20, 0, 0.8); padding: 15px; border-bottom: 2px solid #00FF00; display: flex; justify-content: space-between; font-weight: bold; font-size: 16px; text-shadow: 0 0 5px #00FF00; pointer-events: auto; }
+        
+        /* กรอบสแกนเนอร์ตรงกลางจอ */
+        .scanner-container { flex-grow: 1; display: flex; justify-content: center; align-items: center; position: relative; }
+        .scanner-box { width: 250px; height: 250px; border: 2px dashed #00FF00; position: relative; box-shadow: inset 0 0 20px rgba(0,255,0,0.2); }
+        .scanner-box::before, .scanner-box::after { content: ''; position: absolute; width: 20px; height: 20px; border: 4px solid #00FF00; }
+        .scanner-box::before { top: -4px; left: -4px; border-right: none; border-bottom: none; }
+        .scanner-box::after { bottom: -4px; right: -4px; border-left: none; border-top: none; }
+        
+        /* เส้นเลเซอร์สแกน */
+        .laser { width: 100%; height: 2px; background: red; position: absolute; top: 0; left: 0; box-shadow: 0 0 10px red; animation: scan 2s infinite linear; display: none; }
+        @keyframes scan { 0% { top: 0; } 50% { top: 100%; } 100% { top: 0; } }
+
+        /* แผงควบคุมและคำถามด้านล่าง */
+        .control-panel { background: rgba(0, 20, 0, 0.9); border-top: 2px solid #00FF00; padding: 15px; pointer-events: auto; text-align: center; }
+        
+        .code-block { background: #111; color: #d4d4d4; padding: 10px; text-align: left; border-left: 3px solid #007acc; font-family: 'Courier New', Courier, monospace; margin-bottom: 10px; font-size: 14px; white-space: pre-wrap; }
+        .keyword { color: #569cd6; }
+        .string { color: #ce9178; }
+
+        .btn { background: transparent; color: #00FF00; border: 1px solid #00FF00; padding: 10px 20px; margin: 5px; cursor: pointer; font-family: inherit; font-size: 16px; font-weight: bold; text-transform: uppercase; transition: all 0.3s; width: 90%; max-width: 300px; }
+        .btn:hover, .btn:active { background: #00FF00; color: #000; }
+        .btn-scan { background: #00FF00; color: #000; font-size: 18px; padding: 15px; box-shadow: 0 0 15px #00FF00; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 5px #00FF00; } 50% { box-shadow: 0 0 20px #00FF00; } 100% { box-shadow: 0 0 5px #00FF00; } }
+        
         .hidden { display: none !important; }
-        #question-box { background: #FFDC00; padding: 10px; border-radius: 5px; margin: 10px 0; font-weight: bold; }
-        .answer-btn { background: #2ECC40; margin: 5px; width: 45%; }
     </style>
 </head>
 <body>
 
-    <!-- UI Overlay สำหรับโต้ตอบกับผู้เรียน -->
+    <!-- พื้นหลังเป็นกล้องแบบ Real-time -->
+    <video id="camera-feed" autoplay playsinline></video>
+
+    <!-- เลเยอร์ UI ของระบบสแกน -->
     <div id="ui-layer">
         <div class="top-bar">
-            <div>คะแนน: <span id="score">0</span>/100</div>
-            <div class="progress" id="progress-bar">
-                <div class="bulb-icon" id="bulb-1"></div>
-                <div class="bulb-icon" id="bulb-2"></div>
-                <div class="bulb-icon" id="bulb-3"></div>
-                <div class="bulb-icon" id="bulb-4"></div>
+            <span id="mission-status">SYS_READY // MISSION: 1</span>
+            <span>EXP: <span id="score">0</span></span>
+        </div>
+
+        <div class="scanner-container">
+            <div class="scanner-box" id="scanner-box">
+                <div class="laser" id="laser"></div>
+            </div>
+            <div id="instruction" style="position: absolute; bottom: 10%; background: rgba(0,0,0,0.7); padding: 5px; font-size: 14px;">
+                หันกล้องไปที่หน้าจอ Tinkercad แล้วกด SCAN
             </div>
         </div>
 
-        <div class="mission-panel" id="mission-panel">
-            <h2 id="mission-title">ภารกิจที่ 1: กำเนิดพลังงาน</h2>
-            <p id="mission-desc">เปิดรูปวงจรบนหน้าจออีกเครื่อง แล้วหันกล้องมาสแกนเพื่อเริ่มภารกิจ</p>
-            <p id="marker-status" aria-live="polite">กำลังรอการสแกนรูปวงจร...</p>
-            <div id="question-box" class="hidden">
-                <p id="question-text">คำถามจะปรากฏที่นี่</p>
-                <button class="btn answer-btn" onclick="checkAnswer(true)" id="ans-1">ตัวเลือก 1</button>
-                <button class="btn answer-btn" onclick="checkAnswer(false)" id="ans-2">ตัวเลือก 2</button>
+        <div class="control-panel" id="panel-scan">
+            <button class="btn btn-scan" onclick="startScan()">[ INITIALIZE SCAN ]</button>
+        </div>
+
+        <div class="control-panel hidden" id="panel-question">
+            <div class="code-block" id="question-text">
+<span class="keyword">def</span> <span class="string">analyze_circuit</span>():
+    <span class="keyword">pass</span>
             </div>
-            <button class="btn btn-hint" id="hint-btn" onclick="useHint()">💡 คำใบ้</button>
+            <button class="btn" id="ans-1" onclick="checkAnswer(true)">Choice 1</button>
+            <button class="btn" id="ans-2" onclick="checkAnswer(false)">Choice 2</button>
         </div>
     </div>
 
-    <!-- 3D AR Scene -->
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" cursor="rayOrigin: mouse">
-        <a-marker
-            id="circuit-marker"
-            type="pattern"
-            url="markers/circuit-marker.patt">
-            <!-- องค์ประกอบวงจร -->
-            <a-entity id="circuit-board" position="0 0 0">
-                <!-- แบตเตอรี่ -->
-                <a-box id="battery" class="clickable" position="-1 0.2 0" depth="0.4" height="0.4" width="0.8" color="#FF4136"></a-box>
-                <a-text value="Battery" position="-1 0.7 0" align="center" color="red" scale="0.5 0.5 0.5"></a-text>
-
-                <!-- หลอดไฟ -->
-                <a-sphere id="lightbulb" class="clickable" position="1 0.3 0" radius="0.3" color="#CCCCCC" material="emissive: #000000"></a-sphere>
-                <a-text value="Light Bulb" position="1 0.8 0" align="center" color="yellow" scale="0.5 0.5 0.5"></a-text>
-
-                <!-- สายไฟ (ซ่อนไว้ก่อน จะแสดงเมื่อต่อวงจร) -->
-                <a-cylinder id="wire" position="0 0.1 0" radius="0.03" height="1.8" color="#111111" rotation="0 0 90" visible="false"></a-cylinder>
-            </a-entity>
-        </a-marker>
-        <a-entity camera></a-entity>
-    </a-scene>
-
     <script>
-        // ระบบ State ของเกม
+        // --- ส่วนควบคุมกล้อง WebRTC ---
+        async function initCamera() {
+            try {
+                // พยายามเปิดกล้องหลัง (environment)
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" }
+                });
+                document.getElementById('camera-feed').srcObject = stream;
+            } catch (err) {
+                alert("ไม่สามารถเปิดกล้องได้: โปรดอนุญาตการเข้าถึงกล้องในเบราว์เซอร์");
+                console.error(err);
+            }
+        }
+        
+        // เรียกใช้งานกล้องเมื่อโหลดหน้าเว็บ
+        window.onload = initCamera;
+
+        // --- ส่วนตรรกะเกม ---
         let currentMission = 1;
         let score = 0;
         let firstTry = true;
-        let circuitConnected = false;
 
-        // ข้อมูลภารกิจ
         const missions = [
             {
-                title: "ภารกิจที่ 1: กำเนิดพลังงาน",
-                desc: "แตะที่แบตเตอรี่ และหลอดไฟ เพื่อต่อสายไฟให้วงจรทำงาน",
-                question: "กระแสไฟฟ้าจะไหลออกจากขั้วใดของแบตเตอรี่เสมอ?",
-                answers: ["ขั้วบวก ไป ขั้วลบ", "ขั้วลบ ไป ขั้วบวก"],
-                correct: 0,
-                hint: "กระแสไฟฟ้าไหลจากศักย์ไฟฟ้าสูงไปต่ำ (บวกไปลบ)"
+                type: "วงจรอนุกรม",
+                question: "<span class='keyword'>if</span> switch_1 == <span class='keyword'>True</span> ___ switch_2 == <span class='keyword'>True</span>:\n    light_bulb.on()\n\n# จากวงจรบนจอ (อนุกรม) ควรเติม Operator ใด?",
+                answers: ["and", "or"],
+                correct: 0
             },
             {
-                title: "ภารกิจที่ 2: เส้นทางเดียว (อนุกรม)",
-                desc: "จำลองการต่อวงจร หากหลอดไฟดวงหนึ่งขาด จะเกิดอะไรขึ้น?",
-                question: "ในวงจรอนุกรม หากหลอดไฟขาด 1 ดวง ที่เหลือจะเป็นอย่างไร?",
-                answers: ["สว่างปกติ", "ดับทั้งหมด"],
-                correct: 1,
-                hint: "วงจรอนุกรมมีเส้นทางเดินของกระแสไฟฟ้าเพียงเส้นทางเดียว"
+                type: "วงจรขนาน",
+                question: "<span class='keyword'>if</span> switch_A == <span class='keyword'>True</span> ___ switch_B == <span class='keyword'>True</span>:\n    light_bulb.on()\n\n# จากวงจรบนจอ (ขนาน) ควรเติม Operator ใด?",
+                answers: ["and", "or"],
+                correct: 1
+            },
+            {
+                type: "วงจรผสม",
+                question: "# ไฟดวงแรกอนุกรม ดวงที่สองและสามขนานกัน\n<span class='keyword'>if</span> s1 == <span class='keyword'>True</span> <span class='keyword'>and</span> (s2 == <span class='keyword'>True</span> ___ s3 == <span class='keyword'>True</span>):\n    system.start()",
+                answers: ["and", "or"],
+                correct: 1
             }
-            // สามารถเพิ่มภารกิจที่ 3 และ 4 ได้ตามโครงสร้าง
         ];
 
-        // ระบบปฏิสัมพันธ์ AR (แตะเพื่อเชื่อมต่อ)
-        document.getElementById('battery').addEventListener('click', connectCircuit);
-        document.getElementById('lightbulb').addEventListener('click', connectCircuit);
-
-        // ใช้รูปวงจรบนหน้าจออีกเครื่องเป็น Marker สำหรับเริ่มภารกิจ
-        const marker = document.getElementById('circuit-marker');
-        const markerStatus = document.getElementById('marker-status');
-        marker.addEventListener('markerFound', () => {
-            markerStatus.innerText = 'พบรูปวงจรแล้ว แตะอุปกรณ์เพื่อเชื่อมต่อวงจร';
-        });
-        marker.addEventListener('markerLost', () => {
-            markerStatus.innerText = 'ไม่พบรูปวงจร หันกล้องกลับไปที่หน้าจออีกเครื่อง';
-        });
-
-        function connectCircuit() {
-            if (!circuitConnected) {
-                // แสดงสายไฟและเปิดไฟ
-                document.getElementById('wire').setAttribute('visible', 'true');
-                document.getElementById('lightbulb').setAttribute('material', 'emissive: #FFDC00; emissiveIntensity: 1');
-                document.getElementById('lightbulb').setAttribute('color', '#FFDC00');
-                circuitConnected = true;
-                
-                // แสดงคำถาม
+        function startScan() {
+            // แสดงเอฟเฟกต์สแกน
+            document.getElementById('laser').style.display = 'block';
+            document.getElementById('panel-scan').classList.add('hidden');
+            document.getElementById('instruction').innerText = "ANALYZING TARGET...";
+            
+            // จำลองเวลาประมวลผล AI 1.5 วินาที
+            setTimeout(() => {
+                document.getElementById('laser').style.display = 'none';
+                document.getElementById('instruction').innerText = "TARGET ACQUIRED";
                 showQuestion();
-            }
+            }, 1500);
         }
 
         function showQuestion() {
             let m = missions[currentMission - 1];
-            document.getElementById('question-box').classList.remove('hidden');
-            document.getElementById('question-text').innerText = m.question;
+            document.getElementById('panel-question').classList.remove('hidden');
+            
+            // แสดงคำถามแบบมี Syntax Highlight จำลอง
+            document.getElementById('question-text').innerHTML = m.question;
+            
             document.getElementById('ans-1').innerText = m.answers[0];
             document.getElementById('ans-2').innerText = m.answers[1];
             
-            // ตั้งค่าการตรวจสอบคำตอบ (0 คือปุ่มแรกถูก, 1 คือปุ่มสองถูก)
             document.getElementById('ans-1').onclick = () => checkAnswer(m.correct === 0);
             document.getElementById('ans-2').onclick = () => checkAnswer(m.correct === 1);
         }
 
         function checkAnswer(isCorrect) {
             if (isCorrect) {
-                let points = 20 + (firstTry ? 5 : 0);
+                let points = 50 + (firstTry ? 10 : 0);
                 score += points;
                 document.getElementById('score').innerText = score;
-                document.getElementById(`bulb-${currentMission}`).classList.add('active');
                 
-                alert(`ถูกต้อง! ได้รับ ${points} คะแนน\nปลดล็อก Badge!`);
+                alert(`[ SUCCESS ] คอมไพล์โค้ดผ่าน!\nได้รับ ${points} EXP`);
                 nextMission();
             } else {
                 firstTry = false;
-                alert("ยังไม่ถูกต้อง ลองคิดดูใหม่ หรือใช้คำใบ้สิ!");
+                alert("[ SYNTAX ERROR ] การไหลของกระแสไฟไม่ตรงกับ Operator ลองตรวจสอบวงจรใหม่!");
             }
-        }
-
-        function useHint() {
-            let m = missions[currentMission - 1];
-            alert("คำใบ้: " + m.hint);
-            firstTry = false; // ใช้คำใบ้จะอดโบนัส
         }
 
         function nextMission() {
             currentMission++;
             firstTry = true;
-            circuitConnected = false;
-            document.getElementById('question-box').classList.add('hidden');
-
+            document.getElementById('panel-question').classList.add('hidden');
+            
             if (currentMission > missions.length) {
-                endGame();
+                document.getElementById('instruction').classList.add('hidden');
+                document.getElementById('scanner-box').classList.add('hidden');
+                document.getElementById('panel-scan').classList.remove('hidden');
+                document.getElementById('panel-scan').innerHTML = `
+                    <h2 style="color:#00FF00;">>>> MISSION COMPLETE <<<</h2>
+                    <p>รันโปรแกรมสำเร็จ! Total EXP: ${score}</p>
+                    <p>ระบบเข้าใจการแปลงฮาร์ดแวร์สู่ลอจิกโปรแกรมแล้ว</p>
+                `;
             } else {
-                // รีเซ็ต AR สำหรับด่านต่อไป
-                document.getElementById('wire').setAttribute('visible', 'false');
-                document.getElementById('lightbulb').setAttribute('material', 'emissive: #000000');
-                document.getElementById('lightbulb').setAttribute('color', '#CCCCCC');
-                
-                let m = missions[currentMission - 1];
-                document.getElementById('mission-title').innerText = m.title;
-                document.getElementById('mission-desc').innerText = m.desc;
+                document.getElementById('mission-status').innerText = `SYS_READY // MISSION: ${currentMission}`;
+                document.getElementById('instruction').innerText = `หันกล้องสแกนหน้าจอคอมพิวเตอร์ (${missions[currentMission-1].type})`;
+                document.getElementById('panel-scan').classList.remove('hidden');
             }
-        }
-
-        // ระบบบันทึกข้อมูลและสรุปผล
-        function endGame() {
-            document.getElementById('mission-panel').innerHTML = `
-                <h2>ยินดีด้วย! คุณกอบกู้เมืองพลังงานสำเร็จ!</h2>
-                <p>คะแนนรวมของคุณคือ: <strong>${score}/100</strong></p>
-                <button class="btn" onclick="saveData()">บันทึกคะแนน</button>
-            `;
-        }
-
-        function saveData() {
-            // ระบบส่งข้อมูลไปยัง Google Sheets ผ่าน Webhook (Google Apps Script)
-            const scriptURL = 'YOUR_GOOGLE_APPS_SCRIPT_WEBAPP_URL_HERE'; 
-            
-            // ข้อมูลจำลองของนักเรียนที่ดึงมาจากระบบ Login หรือ Google Forms
-            const studentData = {
-                student_id: "M1_Student",
-                score: score,
-                timestamp: new Date().toISOString()
-            };
-
-            // หากมีการตั้งค่า Google Apps Script Web App ให้ปลดคอมเมนต์โค้ดด้านล่างเพื่อใช้งาน
-            /*
-            fetch(scriptURL, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(studentData)
-            }).then(() => {
-                alert('บันทึกคะแนนลง Google Sheets เรียบร้อยแล้ว!');
-            }).catch(err => console.error('Error!', err.message));
-            */
-            
-            alert('บันทึกคะแนนเรียบร้อย! (จำลองการส่งข้อมูลไป Google Sheets)');
         }
     </script>
 </body>
