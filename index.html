@@ -40,7 +40,8 @@
 
         <div class="mission-panel" id="mission-panel">
             <h2 id="mission-title">ภารกิจที่ 1: กำเนิดพลังงาน</h2>
-            <p id="mission-desc">สแกน Hiro Marker แตะที่แบตเตอรี่และหลอดไฟเพื่อเชื่อมต่อวงจร!</p>
+            <p id="mission-desc">เปิดรูปวงจรบนหน้าจออีกเครื่อง แล้วหันกล้องมาสแกนเพื่อเริ่มภารกิจ</p>
+            <p id="marker-status" aria-live="polite">กำลังรอการสแกนรูปวงจร...</p>
             <div id="question-box" class="hidden">
                 <p id="question-text">คำถามจะปรากฏที่นี่</p>
                 <button class="btn answer-btn" onclick="checkAnswer(true)" id="ans-1">ตัวเลือก 1</button>
@@ -52,7 +53,10 @@
 
     <!-- 3D AR Scene -->
     <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" cursor="rayOrigin: mouse">
-        <a-marker preset="hiro">
+        <a-marker
+            id="circuit-marker"
+            type="pattern"
+            url="markers/circuit-marker.patt">
             <!-- องค์ประกอบวงจร -->
             <a-entity id="circuit-board" position="0 0 0">
                 <!-- แบตเตอรี่ -->
@@ -101,6 +105,16 @@
         // ระบบปฏิสัมพันธ์ AR (แตะเพื่อเชื่อมต่อ)
         document.getElementById('battery').addEventListener('click', connectCircuit);
         document.getElementById('lightbulb').addEventListener('click', connectCircuit);
+
+        // ใช้รูปวงจรบนหน้าจออีกเครื่องเป็น Marker สำหรับเริ่มภารกิจ
+        const marker = document.getElementById('circuit-marker');
+        const markerStatus = document.getElementById('marker-status');
+        marker.addEventListener('markerFound', () => {
+            markerStatus.innerText = 'พบรูปวงจรแล้ว แตะอุปกรณ์เพื่อเชื่อมต่อวงจร';
+        });
+        marker.addEventListener('markerLost', () => {
+            markerStatus.innerText = 'ไม่พบรูปวงจร หันกล้องกลับไปที่หน้าจออีกเครื่อง';
+        });
 
         function connectCircuit() {
             if (!circuitConnected) {
